@@ -1,0 +1,285 @@
+{
+  "entities": {
+    "JoinCode": {
+      "title": "Dynamic Rotating Join Code Lookup",
+      "description": "Maps the single active 6-character join code (rotating and expiring every 10s with zero grace buffer) to permanent roomId for strict anti-proxy security.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "minLength": 6, "maxLength": 6, "pattern": "^[A-Z0-9]{6}$" },
+        "roomId": { "type": "string", "minLength": 6, "maxLength": 6, "pattern": "^[A-Z0-9]{6}$" },
+        "hostUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAtMs": { "type": "number" },
+        "expiresAtMs": { "type": "number" }
+      },
+      "required": ["code", "roomId", "hostUid", "createdAtMs", "expiresAtMs"]
+    },
+    "Room": {
+      "title": "Classroom Session Room",
+      "description": "Represents a live or ended classroom lecture pulse session hosted by an authenticated teacher with topic hierarchy, rotating join codes, and polls.",
+      "type": "object",
+      "properties": {
+        "roomCode": { "type": "string", "minLength": 6, "maxLength": 6, "pattern": "^[A-Z0-9]{6}$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "hostUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "status": { "type": "string", "enum": ["live", "ended"] },
+        "currentTopic": { "type": "string", "maxLength": 140 },
+        "currentMainTopic": { "type": "string", "maxLength": 140 },
+        "currentSubheading": { "type": "string", "maxLength": 140 },
+        "topicVersion": { "type": "number" },
+        "activeJoinCode": { "type": "string", "maxLength": 6 },
+        "codeExpiresAt": { "type": "number" },
+        "previousJoinCode": { "type": "string", "maxLength": 6 },
+        "joinCodeUpdatedAtMs": { "type": "number" },
+        "validJoinCodes": { "type": "array" },
+        "activePollId": { "type": "string", "maxLength": 128 },
+        "lastPollId": { "type": "string", "maxLength": 128 },
+        "activeQuizId": { "type": "string", "maxLength": 128 },
+        "lastQuizId": { "type": "string", "maxLength": 128 },
+        "createdAtMs": { "type": "number" },
+        "endedAtMs": { "type": "number" }
+      },
+      "required": ["roomCode", "title", "hostUid", "status", "topicVersion", "createdAtMs"]
+    },
+    "Report": {
+      "title": "Permanent Post-Class Analytics Report",
+      "description": "Compiled post-class report persisted at reports/{roomCode} for teacher and student review.",
+      "type": "object",
+      "properties": {
+        "roomCode": { "type": "string", "minLength": 6, "maxLength": 6 },
+        "title": { "type": "string", "maxLength": 140 },
+        "hostUid": { "type": "string", "maxLength": 128 },
+        "createdAtMs": { "type": "number" },
+        "endedAtMs": { "type": "number" }
+      },
+      "required": ["roomCode", "title", "hostUid", "createdAtMs", "endedAtMs", "summary"]
+    },
+    "ConductedClass": {
+      "title": "Teacher Conducted Class History Entry",
+      "description": "Saved under users/{uid}/conductedClasses/{roomCode} for teacher history.",
+      "type": "object",
+      "properties": {
+        "roomCode": { "type": "string", "minLength": 6, "maxLength": 6 },
+        "title": { "type": "string", "maxLength": 140 },
+        "status": { "type": "string", "enum": ["live", "ended"] },
+        "createdAtMs": { "type": "number" },
+        "studentCount": { "type": "number" }
+      },
+      "required": ["roomCode", "title", "status", "createdAtMs", "studentCount"]
+    },
+    "AttendedClass": {
+      "title": "Student Attended Class History Entry",
+      "description": "Saved privately under users/{uid}/attendedClasses/{roomCode} with student poll answers.",
+      "type": "object",
+      "properties": {
+        "roomCode": { "type": "string", "minLength": 6, "maxLength": 6 },
+        "title": { "type": "string", "maxLength": 140 },
+        "status": { "type": "string", "enum": ["live", "ended"] },
+        "joinedAtMs": { "type": "number" }
+      },
+      "required": ["roomCode", "title", "status", "joinedAtMs"]
+    },
+    "Participant": {
+      "title": "Anonymous Student Participant State",
+      "description": "Stores a single student's active comprehension status and optional confusion reason tags keyed by uid.",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["clear", "confused"] },
+        "topic": { "type": "string", "maxLength": 140 },
+        "topicVersion": { "type": "number" },
+        "updatedAtMs": { "type": "number" },
+        "joinedAtMs": { "type": "number" },
+        "visibility": { "type": "string", "enum": ["anonymous", "teacher", "public"] },
+        "displayName": { "type": "string", "maxLength": 80 }
+      },
+      "required": ["status", "reasons", "topic", "topicVersion", "updatedAtMs", "joinedAtMs"]
+    },
+    "Poll": {
+      "title": "Classroom Micro-Poll",
+      "description": "Quick 2 to 4 option comprehension poll launched live by the teacher.",
+      "type": "object",
+      "properties": {
+        "question": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "topic": { "type": "string", "maxLength": 140 },
+        "topicVersion": { "type": "number" },
+        "isOpen": { "type": "boolean" },
+        "createdAtMs": { "type": "number" },
+        "createdBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["question", "topic", "topicVersion", "isOpen", "createdAtMs", "createdBy"]
+    },
+    "PollVote": {
+      "title": "Anonymous Student Poll Vote",
+      "description": "Enforces 1 vote per authenticated student per poll without storing PII.",
+      "type": "object",
+      "properties": {
+        "optionIndex": { "type": "number" },
+        "votedAtMs": { "type": "number" }
+      },
+      "required": ["optionIndex", "votedAtMs"]
+    },
+    "QuizBatch": {
+      "title": "AI Conceptual 5-MCQ Batch or Written Question",
+      "description": "Stores teacher-approved pool of conceptual MCQs (dealing 5 unique Qs per student) or a written short-answer prompt.",
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["mcq_set", "written"] },
+        "mainTopic": { "type": "string", "maxLength": 140 },
+        "subheading": { "type": "string", "maxLength": 140 },
+        "batchVersion": { "type": "number" },
+        "isOpen": { "type": "boolean" },
+        "writtenPrompt": { "type": "string", "maxLength": 400 },
+        "createdAtMs": { "type": "number" },
+        "createdBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["mode", "mainTopic", "batchVersion", "isOpen", "createdAtMs", "createdBy"]
+    },
+    "QuizResponse": {
+      "title": "Student Unique 5-MCQ or Written Response",
+      "description": "Student submission for an active AI 5-question conceptual quiz set or written prompt.",
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["mcq_set", "written"] },
+        "batchVersion": { "type": "number" },
+        "score": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "writtenAnswer": { "type": "string", "maxLength": 1200 },
+        "submittedAtMs": { "type": "number" },
+        "visibility": { "type": "string", "enum": ["anonymous", "teacher", "public"] },
+        "displayName": { "type": "string", "maxLength": 80 }
+      },
+      "required": ["mode", "batchVersion", "submittedAtMs"]
+    },
+    "TimelinePoint": {
+      "title": "Confusion Spike Telemetry Point",
+      "description": "1-minute bucketed confusion percentage and spike alert state with Main Topic & Subheading metadata.",
+      "type": "object",
+      "properties": {
+        "timestampMs": { "type": "number" },
+        "minuteBucketMs": { "type": "number" },
+        "timeLabel": { "type": "string", "maxLength": 32 },
+        "topic": { "type": "string", "maxLength": 140 },
+        "mainTopic": { "type": "string", "maxLength": 140 },
+        "subheading": { "type": "string", "maxLength": 140 },
+        "topicVersion": { "type": "number" },
+        "confusionPct": { "type": "number" },
+        "understandingPct": { "type": "number" },
+        "confusedCount": { "type": "number" },
+        "clearCount": { "type": "number" },
+        "totalParticipants": { "type": "number" },
+        "isSpike": { "type": "boolean" }
+      },
+      "required": ["timestampMs", "timeLabel", "topic", "topicVersion", "confusionPct", "totalParticipants", "isSpike"]
+    },
+    "Doubt": {
+      "title": "Anonymous Student Doubt",
+      "description": "1-line anonymous student doubt with peer +1 upvotes and host resolution state.",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "minLength": 3, "maxLength": 160 },
+        "topic": { "type": "string", "maxLength": 140 },
+        "topicVersion": { "type": "number" },
+        "upvoterUids": { "type": "array" },
+        "resolved": { "type": "boolean" },
+        "createdAtMs": { "type": "number" },
+        "visibility": { "type": "string", "enum": ["anonymous", "teacher", "public"] },
+        "displayName": { "type": "string", "maxLength": 80 }
+      },
+      "required": ["text", "topic", "topicVersion", "upvoterUids", "resolved", "createdAtMs"]
+    },
+    "LectureNote": {
+      "title": "Lecture Note or Slide Resource",
+      "description": "Uploaded PDF/PPT/DOC/Image lecture note accessible during and after class.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "fileType": { "type": "string", "maxLength": 24 },
+        "sizeBytes": { "type": "number" },
+        "downloadUrl": { "type": "string", "maxLength": 1100000 },
+        "storagePath": { "type": "string", "maxLength": 300 },
+        "uploadedByUid": { "type": "string", "maxLength": 128 },
+        "createdAtMs": { "type": "number" }
+      },
+      "required": ["title", "fileName", "fileType", "sizeBytes", "downloadUrl", "uploadedByUid", "createdAtMs"]
+    },
+    "PostClassDoubt": {
+      "title": "Post-Class Anonymous Doubt",
+      "description": "Student doubt submitted after lecture ends with teacher reply & resolved state.",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "minLength": 3, "maxLength": 500 },
+        "topicTag": { "type": "string", "maxLength": 140 },
+        "upvoterUids": { "type": "array" },
+        "resolved": { "type": "boolean" },
+        "teacherReply": { "type": "string", "maxLength": 1000 },
+        "repliedAtMs": { "type": "number" },
+        "createdAtMs": { "type": "number" },
+        "visibility": { "type": "string", "enum": ["anonymous", "teacher", "public"] },
+        "displayName": { "type": "string", "maxLength": 80 }
+      },
+      "required": ["text", "upvoterUids", "resolved", "createdAtMs"]
+    }
+  },
+  "firestore": {
+    "/joinCodes/{code}": {
+      "schema": { "$ref": "#/entities/JoinCode" },
+      "description": "Single active 6-character join code resolving to permanent roomId with strict 10s expiry."
+    },
+    "/rooms/{roomCode}": {
+      "schema": { "$ref": "#/entities/Room" },
+      "description": "Classroom session documents keyed by 6-character uppercase alphanumeric roomCode."
+    },
+    "/reports/{roomCode}": {
+      "schema": { "$ref": "#/entities/Report" },
+      "description": "Permanent post-class analytics reports accessible only to enrolled students and host teacher."
+    },
+    "/users/{uid}/conductedClasses/{roomCode}": {
+      "schema": { "$ref": "#/entities/ConductedClass" },
+      "description": "Teacher conducted lecture history."
+    },
+    "/users/{uid}/attendedClasses/{roomCode}": {
+      "schema": { "$ref": "#/entities/AttendedClass" },
+      "description": "Student attended lecture history and private poll answers."
+    },
+    "/users/{uid}/attendedRooms/{roomCode}": {
+      "schema": { "$ref": "#/entities/AttendedClass" },
+      "description": "Student attended room enrollment index keyed by roomCode."
+    },
+    "/rooms/{roomCode}/participants/{uid}": {
+      "schema": { "$ref": "#/entities/Participant" },
+      "description": "Anonymous student comprehension state keyed by Firebase Auth uid."
+    },
+    "/rooms/{roomCode}/polls/{pollId}": {
+      "schema": { "$ref": "#/entities/Poll" },
+      "description": "Live micro-polls created by the room host."
+    },
+    "/rooms/{roomCode}/polls/{pollId}/votes/{uid}": {
+      "schema": { "$ref": "#/entities/PollVote" },
+      "description": "Anonymous single-vote records keyed by Firebase Auth uid."
+    },
+    "/rooms/{roomCode}/quizzes/{quizId}": {
+      "schema": { "$ref": "#/entities/QuizBatch" },
+      "description": "AI-generated conceptual 5-MCQ sets and written prompt questions."
+    },
+    "/rooms/{roomCode}/quizzes/{quizId}/responses/{uid}": {
+      "schema": { "$ref": "#/entities/QuizResponse" },
+      "description": "Per-student quiz set or written prompt submissions."
+    },
+    "/rooms/{roomCode}/timeline/{pointId}": {
+      "schema": { "$ref": "#/entities/TimelinePoint" },
+      "description": "1-minute bucketed confusion percentage snapshots and subheading transitions."
+    },
+    "/rooms/{roomCode}/doubts/{doubtId}": {
+      "schema": { "$ref": "#/entities/Doubt" },
+      "description": "Anonymous upvoted student doubts under the active lecture topic."
+    },
+    "/rooms/{roomCode}/notes/{noteId}": {
+      "schema": { "$ref": "#/entities/LectureNote" },
+      "description": "Teacher-uploaded lecture notes and slides accessible during and after class."
+    },
+    "/rooms/{roomCode}/postClassDoubts/{doubtId}": {
+      "schema": { "$ref": "#/entities/PostClassDoubt" },
+      "description": "Post-class anonymous doubts and instructor replies."
+    }
+  }
+}

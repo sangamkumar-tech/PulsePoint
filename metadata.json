@@ -1,0 +1,6 @@
+{
+  "name": "PulsePoint",
+  "description": "Real-time classroom comprehension telemetry, anonymous student pulse signals, and live micro-polling for large lectures.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

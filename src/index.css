@@ -1,0 +1,135 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+    color-scheme: dark;
+    --pp-bg: #020617;
+    --pp-surface: rgba(15, 23, 42, 0.78);
+    --pp-surface-strong: rgba(15, 23, 42, 0.94);
+    --pp-input: rgba(2, 6, 23, 0.9);
+    --pp-border: rgba(30, 41, 59, 0.95);
+    --pp-border-accent: rgba(56, 189, 248, 0.42);
+    --pp-glow: rgba(56, 189, 248, 0.08);
+    --pp-accent: #0284c7;
+    --pp-accent-hover: #0ea5e9;
+  }
+
+  :root[data-theme="black"] {
+    --pp-bg: #000000;
+    --pp-surface: rgba(10, 10, 10, 0.92);
+    --pp-surface-strong: #0a0a0a;
+    --pp-input: #050505;
+    --pp-border: #222229;
+    --pp-border-accent: rgba(99, 102, 241, 0.55);
+    --pp-glow: rgba(99, 102, 241, 0.1);
+    --pp-accent: #4f46e5;
+    --pp-accent-hover: #6366f1;
+  }
+
+  html,
+  body {
+    background-color: var(--pp-bg);
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+
+  .font-mono, .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+}
+
+.pp-canvas {
+  background-color: var(--pp-bg);
+}
+
+.pp-glow {
+  background: radial-gradient(ellipse at top, var(--pp-glow), transparent 55%);
+}
+
+.pp-card {
+  background-color: var(--pp-surface);
+  border-color: var(--pp-border);
+}
+
+.pp-card-strong {
+  background-color: var(--pp-surface-strong);
+  border-color: var(--pp-border);
+}
+
+.pp-input {
+  background-color: var(--pp-input);
+  border-color: var(--pp-border);
+}
+
+.pp-accent-border {
+  border-color: var(--pp-border-accent);
+}
+
+.pp-primary-btn {
+  background-color: var(--pp-accent);
+}
+
+.pp-primary-btn:hover:not(:disabled) {
+  background-color: var(--pp-accent-hover);
+}
+
+@keyframes confused-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+  }
+}
+
+.animate-confused-pulse {
+  animation: confused-pulse 2.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-confused-pulse {
+    animation: none;
+  }
+}
+
+/* Clean, ink-friendly Post-Class Summary print layout */
+@media print {
+  @page {
+    margin: 14mm;
+    size: A4 portrait;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-surface {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .print-muted {
+    color: #475569 !important;
+  }
+
+  .print-heading {
+    color: #0f172a !important;
+  }
+}

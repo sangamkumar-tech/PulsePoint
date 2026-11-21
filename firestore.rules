@@ -1,0 +1,418 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isAuthenticatedUser() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && request.auth.token.email_verified == true;
+    }
+
+    function isValidRoomCode(code) {
+      return code is string && code.matches('^[A-Z0-9]{6}$');
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function roomDoc(roomCode) {
+      return get(/databases/$(database)/documents/rooms/$(roomCode)).data;
+    }
+
+    function roomExists(roomCode) {
+      return exists(/databases/$(database)/documents/rooms/$(roomCode));
+    }
+
+    function isRoomHost(roomCode) {
+      return isAuthenticatedUser()
+        && isValidRoomCode(roomCode)
+        && roomExists(roomCode)
+        && roomDoc(roomCode).hostUid == request.auth.uid;
+    }
+
+    function isRoomParticipant(roomCode) {
+      return isAuthenticatedUser()
+        && isValidRoomCode(roomCode)
+        && (
+          exists(/databases/$(database)/documents/rooms/$(roomCode)/participants/$(request.auth.uid))
+          || exists(/databases/$(database)/documents/users/$(request.auth.uid)/attendedClasses/$(roomCode))
+          || exists(/databases/$(database)/documents/users/$(request.auth.uid)/attendedRooms/$(roomCode))
+        );
+    }
+
+    function isRoomMember(roomCode) {
+      return isRoomHost(roomCode) || isRoomParticipant(roomCode);
+    }
+
+    function isValidJoinCodePayload(data, code) {
+      return data.keys().hasAll(['code', 'roomId', 'hostUid', 'createdAtMs', 'expiresAtMs'])
+        && data.keys().hasOnly(['code', 'roomId', 'hostUid', 'createdAtMs', 'expiresAtMs'])
+        && data.code == code
+        && isValidRoomCode(data.code)
+        && isValidRoomCode(data.roomId)
+        && data.hostUid == request.auth.uid
+        && data.createdAtMs is number
+        && data.expiresAtMs is number
+        && data.expiresAtMs >= data.createdAtMs;
+    }
+
+    function isValidQuizDoc(data) {
+      return data.keys().hasAll(['mode', 'mainTopic', 'batchVersion', 'isOpen', 'createdAtMs', 'createdBy'])
+        && data.keys().hasOnly(['mode', 'mainTopic', 'subheading', 'topic', 'batchVersion', 'isOpen', 'questions', 'writtenPrompt', 'createdAtMs', 'createdBy'])
+        && data.mode in ['mcq_set', 'written']
+        && data.mainTopic is string
+        && data.mainTopic.size() <= 140
+        && (!('subheading' in data) || (data.subheading is string && data.subheading.size() <= 140))
+        && (!('topic' in data) || (data.topic is string && data.topic.size() <= 140))
+        && data.batchVersion is number
+        && data.batchVersion >= 1
+        && data.isOpen is bool
+        && data.createdAtMs is number
+        && data.createdBy == request.auth.uid
+        && (!('questions' in data) || (data.questions is list && data.questions.size() <= 30))
+        && (!('writtenPrompt' in data) || data.writtenPrompt == null || (data.writtenPrompt is string && data.writtenPrompt.size() <= 400));
+    }
+
+    function isValidQuizResponseDoc(data) {
+      return data.keys().hasAll(['mode', 'batchVersion', 'submittedAtMs'])
+        && data.keys().hasOnly(['mode', 'batchVersion', 'questionIds', 'answers', 'score', 'totalQuestions', 'writtenAnswer', 'submittedAtMs', 'visibility', 'displayName'])
+        && data.mode in ['mcq_set', 'written']
+        && data.batchVersion is number
+        && data.submittedAtMs is number
+        && (!('questionIds' in data) || (data.questionIds is list && data.questionIds.size() <= 10))
+        && (!('answers' in data) || (data.answers is list && data.answers.size() <= 10))
+        && (!('score' in data) || data.score is number)
+        && (!('totalQuestions' in data) || data.totalQuestions is number)
+        && (!('writtenAnswer' in data) || data.writtenAnswer == null || (data.writtenAnswer is string && data.writtenAnswer.size() <= 1200))
+        && (!('visibility' in data) || data.visibility in ['anonymous', 'teacher', 'public'])
+        && (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 80));
+    }
+
+    function isValidLectureNote(data) {
+      return data.keys().hasAll(['title', 'fileName', 'fileType', 'sizeBytes', 'downloadUrl', 'uploadedByUid', 'createdAtMs'])
+        && data.keys().hasOnly(['title', 'fileName', 'fileType', 'mimeType', 'sizeBytes', 'downloadUrl', 'storagePath', 'uploadedByUid', 'createdAtMs'])
+        && data.title is string
+        && data.title.size() >= 1
+        && data.title.size() <= 140
+        && data.fileName is string
+        && data.fileName.size() >= 1
+        && data.fileName.size() <= 200
+        && data.fileType is string
+        && data.fileType.size() <= 24
+        && (!('mimeType' in data) || (data.mimeType is string && data.mimeType.size() <= 140))
+        && data.sizeBytes is number
+        && data.sizeBytes >= 0
+        && data.downloadUrl is string
+        && data.downloadUrl.size() >= 1
+        && data.downloadUrl.size() <= 960000
+        && (!('storagePath' in data) || data.storagePath == null || (data.storagePath is string && data.storagePath.size() <= 300))
+        && data.uploadedByUid == request.auth.uid
+        && data.createdAtMs is number;
+    }
+
+    function isValidPostClassDoubt(data) {
+      return data.keys().hasAll(['text', 'upvoterUids', 'resolved', 'createdAtMs'])
+        && data.keys().hasOnly(['text', 'topicTag', 'upvoterUids', 'resolved', 'teacherReply', 'repliedAtMs', 'createdAtMs', 'visibility', 'displayName'])
+        && data.text is string
+        && data.text.size() >= 3
+        && data.text.size() <= 500
+        && (!('topicTag' in data) || data.topicTag == null || (data.topicTag is string && data.topicTag.size() <= 140))
+        && data.upvoterUids is list
+        && data.upvoterUids.size() <= 300
+        && data.resolved is bool
+        && (!('teacherReply' in data) || data.teacherReply == null || (data.teacherReply is string && data.teacherReply.size() <= 1000))
+        && (!('repliedAtMs' in data) || data.repliedAtMs == null || data.repliedAtMs is number)
+        && data.createdAtMs is number
+        && (!('visibility' in data) || data.visibility in ['anonymous', 'teacher', 'public'])
+        && (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 80));
+    }
+
+    // Dynamic rotating 6-char join codes -> resolves to permanent roomId
+    match /joinCodes/{code} {
+      allow get: if isAuthenticatedUser() && isValidRoomCode(code);
+      allow list: if false;
+
+      allow create: if isAuthenticatedUser()
+        && isValidRoomCode(code)
+        && isValidJoinCodePayload(incoming(), code)
+        && isRoomHost(incoming().roomId);
+
+      allow update: if isAuthenticatedUser()
+        && isValidRoomCode(code)
+        && isValidJoinCodePayload(incoming(), code)
+        && incoming().roomId == existing().roomId
+        && incoming().hostUid == existing().hostUid
+        && isRoomHost(existing().roomId);
+
+      allow delete: if isAuthenticatedUser()
+        && isValidRoomCode(code)
+        && existing().hostUid == request.auth.uid;
+    }
+
+    match /users/{uid}/conductedClasses/{roomCode} {
+      allow read, write: if isAuthenticatedUser()
+        && request.auth.uid == uid
+        && isValidRoomCode(roomCode);
+      allow list: if isAuthenticatedUser() && request.auth.uid == uid;
+    }
+
+    match /users/{uid}/attendedClasses/{roomCode} {
+      allow read, write: if isAuthenticatedUser()
+        && request.auth.uid == uid
+        && isValidRoomCode(roomCode);
+      allow list: if isAuthenticatedUser() && request.auth.uid == uid;
+    }
+
+    match /users/{uid}/attendedRooms/{roomCode} {
+      allow read, write: if isAuthenticatedUser()
+        && request.auth.uid == uid
+        && isValidRoomCode(roomCode);
+      allow list: if isAuthenticatedUser() && request.auth.uid == uid;
+    }
+
+    match /reports/{roomCode} {
+      allow get: if isRoomMember(roomCode);
+      allow create, update: if isRoomHost(roomCode)
+        && isValidRoomCode(roomCode)
+        && incoming().hostUid == request.auth.uid
+        && incoming().roomCode == roomCode;
+    }
+
+    match /rooms/{roomCode} {
+      allow get: if isAuthenticatedUser() && isValidRoomCode(roomCode);
+      allow list: if isAuthenticatedUser() && existing().hostUid == request.auth.uid;
+
+      allow create: if isAuthenticatedUser()
+        && isValidRoomCode(roomCode)
+        && incoming().roomCode == roomCode
+        && incoming().hostUid == request.auth.uid
+        && incoming().status == 'live'
+        && incoming().title is string
+        && incoming().title.size() >= 1
+        && incoming().title.size() <= 140
+        && incoming().currentTopic is string
+        && incoming().currentTopic.size() <= 140
+        && incoming().topicVersion is number;
+
+      allow update: if isAuthenticatedUser()
+        && isValidRoomCode(roomCode)
+        && existing().hostUid == request.auth.uid
+        && incoming().hostUid == existing().hostUid
+        && incoming().roomCode == existing().roomCode;
+
+      match /participants/{uid} {
+        allow get: if isAuthenticatedUser()
+          && isValidRoomCode(roomCode)
+          && isValidId(uid)
+          && (request.auth.uid == uid || isRoomHost(roomCode));
+
+        allow list: if isAuthenticatedUser()
+          && isValidRoomCode(roomCode)
+          && isRoomHost(roomCode);
+
+        allow create, update: if isAuthenticatedUser()
+          && isValidRoomCode(roomCode)
+          && request.auth.uid == uid
+          && roomExists(roomCode)
+          && roomDoc(roomCode).status == 'live'
+          && incoming().keys().hasAll(['status', 'reasons', 'topic', 'topicVersion', 'updatedAtMs', 'joinedAtMs'])
+          && incoming().keys().hasOnly(['status', 'reasons', 'topic', 'topicVersion', 'updatedAtMs', 'joinedAtMs', 'visibility', 'displayName'])
+          && incoming().status in ['clear', 'confused']
+          && incoming().reasons is list
+          && incoming().reasons.size() <= 4
+          && incoming().topic is string
+          && incoming().topic.size() <= 140
+          && incoming().topicVersion is number
+          && incoming().updatedAtMs is number
+          && incoming().joinedAtMs is number
+          && (!('visibility' in incoming()) || incoming().visibility in ['anonymous', 'teacher', 'public'])
+          && (!('displayName' in incoming()) || incoming().displayName == null || (incoming().displayName is string && incoming().displayName.size() <= 80));
+      }
+
+      match /polls/{pollId} {
+        allow read: if isRoomMember(roomCode);
+
+        allow create: if isRoomHost(roomCode)
+          && isValidId(pollId)
+          && roomDoc(roomCode).status == 'live'
+          && incoming().createdBy == request.auth.uid
+          && incoming().question is string
+          && incoming().question.size() >= 1
+          && incoming().question.size() <= 240
+          && incoming().options is list
+          && incoming().options.size() >= 2
+          && incoming().options.size() <= 4;
+
+        allow update: if isRoomHost(roomCode) && isValidId(pollId);
+
+        match /votes/{uid} {
+          allow get: if isAuthenticatedUser()
+            && isValidRoomCode(roomCode)
+            && isValidId(pollId)
+            && (request.auth.uid == uid || isRoomHost(roomCode));
+
+          allow list: if isAuthenticatedUser()
+            && isValidRoomCode(roomCode)
+            && isValidId(pollId)
+            && isRoomHost(roomCode);
+
+          allow create: if isAuthenticatedUser()
+            && isValidRoomCode(roomCode)
+            && isValidId(pollId)
+            && request.auth.uid == uid
+            && roomExists(roomCode)
+            && roomDoc(roomCode).status == 'live'
+            && get(/databases/$(database)/documents/rooms/$(roomCode)/polls/$(pollId)).data.isOpen == true
+            && incoming().keys().hasAll(['optionIndex', 'votedAtMs'])
+            && incoming().keys().hasOnly(['optionIndex', 'votedAtMs'])
+            && incoming().optionIndex is int
+            && incoming().optionIndex >= 0
+            && incoming().optionIndex <= 3
+            && incoming().votedAtMs is number;
+        }
+      }
+
+      // AI 5-Question Conceptual Quizzes & Written Short-Answer Prompts
+      match /quizzes/{quizId} {
+        allow read: if isRoomMember(roomCode);
+
+        allow create: if isRoomHost(roomCode)
+          && isValidId(quizId)
+          && roomDoc(roomCode).status == 'live'
+          && isValidQuizDoc(incoming());
+
+        allow update: if isRoomHost(roomCode)
+          && isValidId(quizId)
+          && isValidQuizDoc(incoming())
+          && incoming().createdBy == existing().createdBy;
+
+        match /responses/{uid} {
+          allow get: if isAuthenticatedUser()
+            && isValidRoomCode(roomCode)
+            && isValidId(quizId)
+            && isValidId(uid)
+            && (request.auth.uid == uid || isRoomHost(roomCode));
+
+          allow list: if isAuthenticatedUser()
+            && isValidRoomCode(roomCode)
+            && isValidId(quizId)
+            && isRoomHost(roomCode);
+
+          allow create, update: if isAuthenticatedUser()
+            && isValidRoomCode(roomCode)
+            && isValidId(quizId)
+            && request.auth.uid == uid
+            && roomExists(roomCode)
+            && roomDoc(roomCode).status == 'live'
+            && get(/databases/$(database)/documents/rooms/$(roomCode)/quizzes/$(quizId)).data.isOpen == true
+            && isValidQuizResponseDoc(incoming());
+        }
+      }
+
+      match /timeline/{pointId} {
+        allow read: if isRoomMember(roomCode);
+        allow create, update: if isRoomHost(roomCode) && isValidId(pointId);
+      }
+
+      match /doubts/{doubtId} {
+        allow read: if isRoomMember(roomCode);
+
+        allow create: if isAuthenticatedUser()
+          && isValidRoomCode(roomCode)
+          && isValidId(doubtId)
+          && roomExists(roomCode)
+          && roomDoc(roomCode).status == 'live'
+          && incoming().keys().hasAll(['text', 'topic', 'topicVersion', 'upvoterUids', 'resolved', 'createdAtMs'])
+          && incoming().keys().hasOnly(['text', 'topic', 'topicVersion', 'upvoterUids', 'resolved', 'createdAtMs', 'visibility', 'displayName'])
+          && incoming().text is string
+          && incoming().text.size() >= 3
+          && incoming().text.size() <= 160
+          && incoming().topic is string
+          && incoming().topic.size() <= 140
+          && incoming().topicVersion is number
+          && incoming().upvoterUids is list
+          && incoming().upvoterUids.size() <= 200
+          && incoming().resolved == false
+          && incoming().createdAtMs is number
+          && (!('visibility' in incoming()) || incoming().visibility in ['anonymous', 'teacher', 'public'])
+          && (!('displayName' in incoming()) || incoming().displayName == null || (incoming().displayName is string && incoming().displayName.size() <= 80));
+
+        allow update: if isAuthenticatedUser()
+          && isValidRoomCode(roomCode)
+          && isValidId(doubtId)
+          && roomExists(roomCode)
+          && (
+            isRoomHost(roomCode)
+            || (
+              roomDoc(roomCode).status == 'live'
+              && incoming().text == existing().text
+              && incoming().topic == existing().topic
+              && incoming().topicVersion == existing().topicVersion
+              && incoming().resolved == existing().resolved
+              && incoming().upvoterUids is list
+            )
+          );
+      }
+
+      match /rechecks/{recheckId}/responses/{uid} {
+        allow read: if isRoomMember(roomCode);
+        allow create, update: if isAuthenticatedUser()
+          && isValidRoomCode(roomCode)
+          && isValidId(recheckId)
+          && request.auth.uid == uid
+          && roomExists(roomCode)
+          && roomDoc(roomCode).status == 'live'
+          && isRoomParticipant(roomCode)
+          && incoming().outcome in ['cleared', 'still_stuck']
+          && incoming().respondedAtMs is number;
+      }
+
+      // Lecture Notes & Resources (accessible only to verified class members during AND after class)
+      match /notes/{noteId} {
+        allow read: if isRoomMember(roomCode);
+
+        allow create: if isRoomHost(roomCode)
+          && isValidId(noteId)
+          && isValidLectureNote(incoming());
+
+        allow delete: if isRoomHost(roomCode) && isValidId(noteId);
+      }
+
+      // Post-Class Anonymous Doubt Portal (enrolled students submit after lecture ends, teachers reply/resolve)
+      match /postClassDoubts/{doubtId} {
+        allow read: if isRoomMember(roomCode);
+
+        allow create: if isRoomMember(roomCode)
+          && isValidId(doubtId)
+          && roomExists(roomCode)
+          && isValidPostClassDoubt(incoming())
+          && incoming().resolved == false;
+
+        allow update: if isRoomMember(roomCode)
+          && isValidId(doubtId)
+          && roomExists(roomCode)
+          && isValidPostClassDoubt(incoming())
+          && (
+            (isRoomHost(roomCode)
+              && incoming().diff(existing()).affectedKeys().hasOnly(['teacherReply', 'repliedAtMs', 'resolved']))
+            || (incoming().diff(existing()).affectedKeys().hasOnly(['upvoterUids'])
+              && incoming().text == existing().text
+              && incoming().resolved == existing().resolved)
+          );
+      }
+    }
+  }
+}
